@@ -20,9 +20,19 @@ connectDB();
 // Initialize Socket.io
 initSocket(server);
 
-// ✅ Fixed CORS setup for frontend at localhost:5173
+// ✅ Support multiple client URLs (comma-separated in .env)
+const allowedOrigins = config.CLIENT_URL
+  ? config.CLIENT_URL.split(',').map(url => url.trim())
+  : ['http://localhost:5173'];
+
 app.use(cors({
-  origin: config.CLIENT_URL || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 

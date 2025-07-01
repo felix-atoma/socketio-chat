@@ -22,8 +22,8 @@ initSocket(server);
 
 // ✅ Fixed CORS setup for frontend at localhost:5173
 app.use(cors({
-  origin: 'http://localhost:5173',
-  credentials: true
+  origin: config.CLIENT_URL || 'http://localhost:5173',
+  credentials: true,
 }));
 
 // Middleware
@@ -39,6 +39,11 @@ app.use('/api/messages', protect, messageRoutes);
 // Health check
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'OK' });
+});
+
+// ✅ Root route for Render home page
+app.get('/', (req, res) => {
+  res.send('🔧 Socket.io Chat Backend is running. Visit /api/health for status.');
 });
 
 // Error handler

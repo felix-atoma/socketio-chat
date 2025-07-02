@@ -1,11 +1,11 @@
+// src/utils/api.js
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
-  withCredentials: false, // Use `true` only if using cookies
+  baseURL: import.meta.env.VITE_API_BASE_URL,
+  withCredentials: true, // ✅ Required for cookies or CORS with credentials
 });
 
-// ✅ Automatically add JWT token from localStorage
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');

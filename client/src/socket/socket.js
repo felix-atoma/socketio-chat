@@ -1,8 +1,13 @@
 // src/socket/socket.js
 import { io } from 'socket.io-client';
 
-// Vite environment variable for backend socket server
+// ✅ Use environment variable or fallback
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+
+// Determine WebSocket protocol: ws:// or wss://
+const isSecure = SOCKET_URL.startsWith('https');
+const WS_PROTOCOL = isSecure ? 'wss' : 'ws';
+const WS_URL = SOCKET_URL.replace(/^http/, WS_PROTOCOL);
 
 let socket = null;
 
@@ -12,9 +17,11 @@ export const initializeSocket = (token) => {
     return socket;
   }
 
-  socket = io(SOCKET_URL, {
+  socket = io(WS_URL, {
     auth: { token },
     transports: ['websocket'],
+    timeout: 20000, // ⏱️ Increase timeout to 20s
+    connectTimeout: 20000,
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
@@ -27,7 +34,7 @@ export const initializeSocket = (token) => {
   });
 
   socket.on('connect_error', (err) => {
-    console.error('❌ Socket connection error:', err.message);
+    console.error('❌ Socket connection error:', err.message, err);
   });
 
   socket.on('disconnect', (reason) => {

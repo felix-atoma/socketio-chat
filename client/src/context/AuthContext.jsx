@@ -8,13 +8,13 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(localStorage.getItem('token') || '');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  // ⬇️ Apply token to Axios globally
+  // ✅ Apply token to Axios and initialize socket
   useEffect(() => {
     if (token) {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -25,30 +25,33 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token]);
 
-  // ⬇️ Check if user is authenticated on mount
+  // ✅ Check authentication on mount
   useEffect(() => {
     const checkAuth = async () => {
-      try {
-        if (token) {
-          api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          const decoded = jwtDecode(token);
-          setUser(decoded);
-          setIsAuthenticated(true);
+      if (!token) {
+        setLoading(false);
+        return;
+      }
 
-          // Optional: Verify token by fetching user
-          await api.get('/auth/me');
-        }
+      try {
+        const decoded = jwtDecode(token);
+        setUser(decoded);
+        setIsAuthenticated(true);
+
+        // Optional: verify token by fetching current user
+        await api.get('/auth/me');
       } catch (err) {
         console.error('Auth check failed:', err);
-        logout();
+        logout(false); // avoid redirect on first load
       } finally {
         setLoading(false);
       }
     };
 
     checkAuth();
-  }, [token]);
+  }, []);
 
+  // ✅ Login handler
   const login = async (email, password) => {
     try {
       const res = await api.post('/auth/login', { email, password });
@@ -64,11 +67,13 @@ export const AuthProvider = ({ children }) => {
 
       return { success: true };
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
-      return { success: false, error: err.response?.data?.message || 'Login failed' };
+      const msg = err.response?.data?.message || 'Login failed';
+      setError(msg);
+      return { success: false, error: msg };
     }
   };
 
+  // ✅ Registration handler
   const register = async (username, email, password) => {
     try {
       const res = await api.post('/auth/register', { username, email, password });
@@ -84,19 +89,21 @@ export const AuthProvider = ({ children }) => {
 
       return { success: true };
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed');
-      return { success: false, error: err.response?.data?.message || 'Registration failed' };
+      const msg = err.response?.data?.message || 'Registration failed';
+      setError(msg);
+      return { success: false, error: msg };
     }
   };
 
-  const logout = () => {
+  // ✅ Logout (optional redirect)
+  const logout = (redirect = true) => {
     localStorage.removeItem('token');
-    setToken(null);
+    setToken('');
     setUser(null);
     setIsAuthenticated(false);
     delete api.defaults.headers.common['Authorization'];
     disconnectSocket();
-    navigate('/login');
+    if (redirect) navigate('/login');
   };
 
   return (

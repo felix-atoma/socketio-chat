@@ -1,6 +1,8 @@
+// src/context/ChatContext.jsx
 import { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../utils/api';
 import { useSocket } from './SocketContext';
+import { useAuth } from './AuthContext';
 
 const ChatContext = createContext();
 
@@ -12,13 +14,32 @@ export const ChatProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [typingUser, setTypingUser] = useState(null);
+  const [socketConnected, setSocketConnected] = useState(false);
+
   const { socket } = useSocket();
+  const { isAuthenticated, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (socket) {
+      setSocketConnected(socket.connected);
+
+      socket.on('connect', () => setSocketConnected(true));
+      socket.on('disconnect', () => setSocketConnected(false));
+    }
+
+    return () => {
+      if (socket) {
+        socket.off('connect');
+        socket.off('disconnect');
+      }
+    };
+  }, [socket]);
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
-        const res = await axios.get('/api/users');
+        const res = await api.get('/users');
         setUsers(res.data);
       } catch (err) {
         setError(err.response?.data?.message || 'Error fetching users');
@@ -27,24 +48,28 @@ export const ChatProvider = ({ children }) => {
       }
     };
 
-    fetchUsers();
-  }, []);
+    if (isAuthenticated && !authLoading) {
+      fetchUsers();
+    }
+  }, [isAuthenticated, authLoading]);
 
   useEffect(() => {
     if (!socket) return;
 
     const handlePrivateMessage = (message) => {
       if (
-        (message.sender._id === currentChat?._id || message.receiver._id === currentChat?._id) ||
-        (message.sender._id === currentChat || message.receiver._id === currentChat)
+        message.sender._id === currentChat?._id ||
+        message.receiver._id === currentChat?._id ||
+        message.sender._id === currentChat ||
+        message.receiver._id === currentChat
       ) {
-        setMessages(prev => [...prev, message]);
+        setMessages((prev) => [...prev, message]);
       }
     };
 
     const handleRoomMessage = (message) => {
       if (message.room === currentChat) {
-        setMessages(prev => [...prev, message]);
+        setMessages((prev) => [...prev, message]);
       }
     };
 
@@ -72,11 +97,11 @@ export const ChatProvider = ({ children }) => {
       setMessages([]);
       setCurrentChat(chatId);
 
-      const endpoint = isRoom 
-        ? `/api/messages?room=${chatId}`
-        : `/api/messages?receiverId=${chatId}`;
+      const endpoint = isRoom
+        ? `/messages?room=${chatId}`
+        : `/messages?receiverId=${chatId}`;
 
-      const res = await axios.get(endpoint);
+      const res = await api.get(endpoint);
       setMessages(res.data);
     } catch (err) {
       setError(err.response?.data?.message || 'Error fetching messages');
@@ -86,60 +111,54 @@ export const ChatProvider = ({ children }) => {
   };
 
   const sendPrivateMessage = async (receiverId, content) => {
-    try {
-      if (!socket) throw new Error('Socket not connected');
-
-      return new Promise((resolve, reject) => {
-        socket.emit('private-message', { receiverId, content }, (response) => {
-          if (response.success) {
-            resolve(response.message);
-          } else {
-            reject(new Error(response.error));
-          }
-        });
-      });
-    } catch (err) {
-      setError(err.message);
-      throw err;
+    if (!socket || !socket.connected) {
+      throw new Error('Socket not connected');
     }
+
+    return new Promise((resolve, reject) => {
+      socket.emit('private-message', { receiverId, content }, (response) => {
+        if (response.success) {
+          resolve(response.message);
+        } else {
+          reject(new Error(response.error));
+        }
+      });
+    });
   };
 
   const sendRoomMessage = async (room, content) => {
-    try {
-      if (!socket) throw new Error('Socket not connected');
-
-      return new Promise((resolve, reject) => {
-        socket.emit('room-message', { room, content }, (response) => {
-          if (response.success) {
-            resolve(response.message);
-          } else {
-            reject(new Error(response.error));
-          }
-        });
-      });
-    } catch (err) {
-      setError(err.message);
-      throw err;
+    if (!socket || !socket.connected) {
+      throw new Error('Socket not connected');
     }
+
+    return new Promise((resolve, reject) => {
+      socket.emit('room-message', { room, content }, (response) => {
+        if (response.success) {
+          resolve(response.message);
+        } else {
+          reject(new Error(response.error));
+        }
+      });
+    });
   };
 
   const sendTypingIndicator = (receiverId, isTyping) => {
-    if (!socket) return;
+    if (!socket || !socket.connected) return;
     socket.emit('typing', { receiverId, isTyping });
   };
 
   const markMessagesAsRead = (messageIds) => {
-    if (!socket) return;
+    if (!socket || !socket.connected) return;
     socket.emit('mark-as-read', messageIds);
   };
 
   const joinRoom = (room) => {
-    if (!socket) return;
+    if (!socket || !socket.connected) return;
     socket.emit('join-room', room);
   };
 
   const leaveRoom = (room) => {
-    if (!socket) return;
+    if (!socket || !socket.connected) return;
     socket.emit('leave-room', room);
   };
 
@@ -160,6 +179,7 @@ export const ChatProvider = ({ children }) => {
         markMessagesAsRead,
         joinRoom,
         leaveRoom,
+        socketConnected,
       }}
     >
       {children}
@@ -168,5 +188,4 @@ export const ChatProvider = ({ children }) => {
 };
 
 export const useChat = () => useContext(ChatContext);
-
 export default ChatProvider;
